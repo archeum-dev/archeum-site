@@ -1,0 +1,84 @@
+{
+  "hash": "8eaf9986",
+  "configHash": "481a63f2",
+  "lockfileHash": "79f5dc7d",
+  "browserHash": "98019e61",
+  "optimized": {
+    "@react-three/drei": {
+      "src": "../../node_modules/@react-three/drei/index.js",
+      "file": "@react-three_drei.js",
+      "fileHash": "6279a935",
+      "needsInterop": false
+    },
+    "@react-three/fiber": {
+      "src": "../../node_modules/@react-three/fiber/dist/react-three-fiber.esm.js",
+      "file": "@react-three_fiber.js",
+      "fileHash": "35e3c62a",
+      "needsInterop": false
+    },
+    "@react-three/postprocessing": {
+      "src": "../../node_modules/@react-three/postprocessing/dist/index.js",
+      "file": "@react-three_postprocessing.js",
+      "fileHash": "c87b1396",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "26208eed",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "57c6054d",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "1280df52",
+      "needsInterop": true
+    },
+    "three": {
+      "src": "../../node_modules/three/build/three.module.js",
+      "file": "three.js",
+      "fileHash": "86aa2faf",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-DUEDWNxO": {
+      "file": "chunk-DUEDWNxO.js",
+      "isDynamicEntry": false
+    },
+    "client-BVzbTAiC": {
+      "file": "client-BVzbTAiC.js",
+      "isDynamicEntry": false
+    },
+    "hls-ChCELP2q": {
+      "file": "hls-ChCELP2q.js",
+      "isDynamicEntry": true
+    },
+    "hls-D980t06Y": {
+      "file": "hls-D980t06Y.js",
+      "isDynamicEntry": false
+    },
+    "react-Cp03pb_8": {
+      "file": "react-Cp03pb_8.js",
+      "isDynamicEntry": false
+    },
+    "react-three-fiber.esm-BZVzJVPA": {
+      "file": "react-three-fiber.esm-BZVzJVPA.js",
+      "isDynamicEntry": false
+    },
+    "three.module-BCW3tEEI": {
+      "file": "three.module-BCW3tEEI.js",
+      "isDynamicEntry": false
+    },
+    "vision_bundle-CtsOj-Z6": {
+      "file": "vision_bundle-CtsOj-Z6.js",
+      "isDynamicEntry": true
+    }
+  }
+}
