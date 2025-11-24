@@ -73,7 +73,7 @@ export default function ContentPane({ animationPhase }) {
         {
             id: 'ecosystem',
             title: 'The Ecosystem',
-            description: 'Applications run on the edge with data from nodes. No barrier to entry for developers, driving innovation and competition.',
+            description: 'Applications run on the edge with data from nodes. No barrier to entry for developers, driving innovation, collaboration, and competition.',
             subtitle: '',
             titleColor: '#ff8800',
             subtitleColor: '#ff8800',
