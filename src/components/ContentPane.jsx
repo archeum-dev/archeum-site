@@ -51,7 +51,7 @@ export default function ContentPane({ animationPhase }) {
             subtitleColor: '#ffffff',
             details: [
                 'Leverages Ethereum\'s proven technology',
-                'Immutable handle registry as a smart contract',
+                'Immutable smart contract as central handle registry',
                 'Used as the sole source of identity',
                 'No single point of failure'
             ]
