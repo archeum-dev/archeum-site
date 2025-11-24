@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
+import { Route, Switch } from 'wouter'
 import Scene from './components/Scene'
 import ContentPane from './components/ContentPane'
+import AIHelp from './components/AIHelp'
 
 const MAX_SCROLL_PROGRESS = 0.78
 const FINAL_OVERLAY_SHOW_THRESHOLD = MAX_SCROLL_PROGRESS - 0.001
 const FINAL_OVERLAY_HIDE_THRESHOLD = MAX_SCROLL_PROGRESS - 0.02
 
-function App() {
+function MainApp() {
   const [scrollProgress, setScrollProgress] = useState(0)
   const [targetProgress, setTargetProgress] = useState(0)
   const [animationPhase, setAnimationPhase] = useState('intro')
@@ -131,7 +133,25 @@ function App() {
           justifyContent: 'space-between',
           transition: 'all 0.3s ease'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              cursor: 'pointer',
+              transition: 'opacity 0.2s ease'
+            }}
+            onClick={() => {
+              setTargetProgress(0)
+              setAnimationPhase('intro')
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.opacity = '0.8'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.opacity = '1'
+            }}
+          >
             <img src="/logo.png" alt="Archeum Logo" style={{ width: '28px', height: 'auto' }} />
             <span style={{
               fontSize: '1.35rem',
@@ -306,6 +326,15 @@ function App() {
         </p>
       </div>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <Switch>
+      <Route path="/ai-help" component={AIHelp} />
+      <Route component={MainApp} />
+    </Switch>
   )
 }
 

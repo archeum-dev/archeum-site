@@ -37,7 +37,7 @@ export default function ContentPane({ animationPhase }) {
             id: 'intro',
             title: 'ARCHEUM',
             useBanner: true,
-            description: 'The decentralized cloud for the next generation of applications.',
+            description: 'The decentralized cloud for next-generation applications.',
             subtitle: 'Scroll to explore ↓',
             titleColor: '#ffffff',
             subtitleColor: '#00f0ff'
@@ -51,7 +51,7 @@ export default function ContentPane({ animationPhase }) {
             subtitleColor: '#ffffff',
             details: [
                 'Leverages Ethereum\'s proven technology',
-                'Immutable smart contract as central handle registry',
+                'Immutable smart contract as central registry',
                 'Used as the sole source of identity',
                 'No single point of failure'
             ]
