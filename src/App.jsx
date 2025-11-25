@@ -84,7 +84,7 @@ function MainApp() {
       setScrollProgress(prev => {
         const diff = targetProgress - prev
         if (Math.abs(diff) < 0.001) return targetProgress
-        return prev + diff * (isMobile ? 0.03 : 0.15) // Much slower on mobile for smoother animations
+        return prev + diff * (isMobile ? 0.08 : 0.15) // Faster mobile animations
       })
       animationFrameRef.current = requestAnimationFrame(animate)
     }
@@ -163,7 +163,7 @@ function MainApp() {
         if (Math.abs(diff) < 0.001) {
           return blackoutTargetRef.current
         }
-        return prev + diff * (isMobile ? 0.03 : 0.1) // Match mobile scroll speed
+        return prev + diff * (isMobile ? 0.08 : 0.1) // Match mobile scroll speed
       })
       blackoutAnimRef.current = requestAnimationFrame(animateBlackout)
     }
@@ -183,7 +183,7 @@ function MainApp() {
         if (Math.abs(diff) < 0.001) {
           return finalOverlayTargetRef.current
         }
-        return prev + diff * (isMobile ? 0.03 : 0.08) // Match mobile speed
+        return prev + diff * (isMobile ? 0.08 : 0.08) // Match mobile speed
       })
       finalOverlayAnimRef.current = requestAnimationFrame(animateOverlay)
     }

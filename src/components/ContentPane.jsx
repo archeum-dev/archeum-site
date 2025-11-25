@@ -199,7 +199,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                 right: isMobile ? 0 : 'auto',
                 width: isMobile ? '100vw' : '40%',
                 height: isMobile ? 'auto' : '100vh',
-                maxHeight: isMobile ? '50vh' : '100vh',
+                maxHeight: isMobile ? '45vh' : '100vh',
                 overflow: isMobile ? 'hidden' : 'auto',
                 background: isMobile
                     ? 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.6) 40%, transparent 100%)'
@@ -207,13 +207,15 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                 color: textColor,
                 scrollBehavior: isMobile ? 'auto' : 'smooth',
                 pointerEvents: 'auto',
-                paddingTop: isMobile ? '2rem' : '80px',
-                paddingBottom: isMobile ? '4rem' : '0',
-                paddingLeft: isMobile ? '2rem' : '0',
-                paddingRight: isMobile ? '2rem' : '0',
+                paddingTop: isMobile ? '1.5rem' : '80px',
+                paddingBottom: isMobile ? '3rem' : '0',
+                paddingLeft: isMobile ? '1.5rem' : '0',
+                paddingRight: isMobile ? '1.5rem' : '0',
                 transition: 'background 0.3s ease, color 0.3s ease',
                 scrollSnapType: isMobile ? 'none' : 'y proximity',
-                display: 'block',
+                display: isMobile ? 'flex' : 'block',
+                flexDirection: isMobile ? 'column' : undefined,
+                justifyContent: isMobile ? 'flex-end' : undefined,
                 zIndex: 10,
                 boxSizing: 'border-box'
             }}
