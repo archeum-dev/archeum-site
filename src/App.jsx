@@ -4,20 +4,79 @@ import Scene from './components/Scene'
 import ContentPane from './components/ContentPane'
 import AIHelp from './components/AIHelp'
 
-const MAX_SCROLL_PROGRESS = 0.78
-const FINAL_OVERLAY_SHOW_THRESHOLD = MAX_SCROLL_PROGRESS - 0.001
-const FINAL_OVERLAY_HIDE_THRESHOLD = MAX_SCROLL_PROGRESS - 0.02
+const MAX_SCROLL_PROGRESS = 0.82
+const BLACKOUT_START = 0.78
+const BLACKOUT_END = 0.82
 
 function MainApp() {
   const [scrollProgress, setScrollProgress] = useState(0)
   const [targetProgress, setTargetProgress] = useState(0)
   const [animationPhase, setAnimationPhase] = useState('intro')
+  const [blackoutProgress, setBlackoutProgress] = useState(0)
   const [finalOverlayProgress, setFinalOverlayProgress] = useState(0)
+  const [isMobile, setIsMobile] = useState(false)
+  const [finalOverlayTouchStart, setFinalOverlayTouchStart] = useState(null)
+  const [finalOverlayTouchEnd, setFinalOverlayTouchEnd] = useState(null)
   const scrollContainerRef = useRef(null)
+  const contentPaneRef = useRef(null)
   const animationFrameRef = useRef(null)
+  const blackoutTargetRef = useRef(0)
   const finalOverlayTargetRef = useRef(0)
-  const lastScrollProgressRef = useRef(0)
+  const blackoutAnimRef = useRef(null)
   const finalOverlayAnimRef = useRef(null)
+
+  // Detect mobile screen size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Handle scroll progress for mobile swipe navigation
+  const handleScrollProgress = (scrollPosition) => {
+    if (isMobile) {
+      // Map horizontal scroll to animation phases
+      // 5 positions: intro(0), foundation(0.25), network(0.5), ecosystem(0.75), final(1.0)
+      // Each static state shows only lines TO that layer, not ABOVE it
+      if (scrollPosition < 0.2) {
+        // Intro section - no lines
+        setTargetProgress(0)
+        setAnimationPhase('intro')
+        blackoutTargetRef.current = 0
+      } else if (scrollPosition < 0.45) {
+        // Foundation section - camera at foundation, no lines yet
+        setTargetProgress(0.18)
+        setAnimationPhase('foundation')
+        blackoutTargetRef.current = 0
+      } else if (scrollPosition < 0.7) {
+        // Network section - foundation-to-network lines complete, no lines above
+        setTargetProgress(0.38)
+        setAnimationPhase('network')
+        blackoutTargetRef.current = 0
+      } else if (scrollPosition < 0.95) {
+        // Ecosystem section - network-to-ecosystem lines complete, no upward lines
+        setTargetProgress(0.61)
+        setAnimationPhase('ecosystem')
+        blackoutTargetRef.current = 0
+      } else {
+        // Final screen - animate to blackout and show final overlay
+        setTargetProgress(0.82) // Go to blackout state
+        setAnimationPhase('ecosystem')
+        blackoutTargetRef.current = 1
+      }
+    } else {
+      // Desktop: handle blackout only
+      if (scrollPosition > 0.95) {
+        const blackoutT = (scrollPosition - 0.95) / 0.03
+        blackoutTargetRef.current = Math.min(1, blackoutT)
+      } else {
+        blackoutTargetRef.current = 0
+      }
+    }
+  }
 
   // Smooth scroll animation
   useEffect(() => {
@@ -25,7 +84,7 @@ function MainApp() {
       setScrollProgress(prev => {
         const diff = targetProgress - prev
         if (Math.abs(diff) < 0.001) return targetProgress
-        return prev + diff * 0.15 // Smooth easing
+        return prev + diff * (isMobile ? 0.03 : 0.15) // Much slower on mobile for smoother animations
       })
       animationFrameRef.current = requestAnimationFrame(animate)
     }
@@ -35,9 +94,11 @@ function MainApp() {
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [targetProgress])
+  }, [targetProgress, isMobile])
 
   useEffect(() => {
+    if (isMobile) return // Skip wheel handling on mobile, use natural scroll instead
+
     const handleWheel = (e) => {
       e.preventDefault()
       const delta = e.deltaY
@@ -69,20 +130,50 @@ function MainApp() {
     return () => {
       window.removeEventListener('wheel', handleWheel)
     }
-  }, [targetProgress, animationPhase])
+  }, [targetProgress, animationPhase, isMobile])
 
-  // Final overlay animation target
+  // Blackout animation target (scroll-controlled, desktop only)
   useEffect(() => {
-    const last = lastScrollProgressRef.current
-    const goingDown = scrollProgress >= last
-    lastScrollProgressRef.current = scrollProgress
+    if (isMobile) return // Mobile handles blackout in handleScrollProgress
 
-    if (goingDown && scrollProgress >= FINAL_OVERLAY_SHOW_THRESHOLD) {
+    if (scrollProgress >= BLACKOUT_START && scrollProgress < BLACKOUT_END) {
+      const blackoutT = (scrollProgress - BLACKOUT_START) / (BLACKOUT_END - BLACKOUT_START)
+      blackoutTargetRef.current = blackoutT
+    } else if (scrollProgress >= BLACKOUT_END) {
+      blackoutTargetRef.current = 1
+    } else {
+      blackoutTargetRef.current = 0
+    }
+  }, [scrollProgress, isMobile])
+
+  // Final overlay fades in automatically once blackout is complete
+  useEffect(() => {
+    if (blackoutProgress >= 0.95) {
       finalOverlayTargetRef.current = 1
-    } else if (!goingDown && scrollProgress <= FINAL_OVERLAY_HIDE_THRESHOLD) {
+    } else {
       finalOverlayTargetRef.current = 0
     }
-  }, [scrollProgress])
+  }, [blackoutProgress])
+
+  // Animate blackout overlay (scroll-controlled fade to black)
+  useEffect(() => {
+    const animateBlackout = () => {
+      setBlackoutProgress(prev => {
+        const diff = blackoutTargetRef.current - prev
+        if (Math.abs(diff) < 0.001) {
+          return blackoutTargetRef.current
+        }
+        return prev + diff * (isMobile ? 0.03 : 0.1) // Match mobile scroll speed
+      })
+      blackoutAnimRef.current = requestAnimationFrame(animateBlackout)
+    }
+    blackoutAnimRef.current = requestAnimationFrame(animateBlackout)
+    return () => {
+      if (blackoutAnimRef.current) {
+        cancelAnimationFrame(blackoutAnimRef.current)
+      }
+    }
+  }, [isMobile])
 
   // Animate final overlay independently of scroll
   useEffect(() => {
@@ -92,7 +183,7 @@ function MainApp() {
         if (Math.abs(diff) < 0.001) {
           return finalOverlayTargetRef.current
         }
-        return prev + diff * 0.06
+        return prev + diff * (isMobile ? 0.03 : 0.08) // Match mobile speed
       })
       finalOverlayAnimRef.current = requestAnimationFrame(animateOverlay)
     }
@@ -102,7 +193,31 @@ function MainApp() {
         cancelAnimationFrame(finalOverlayAnimRef.current)
       }
     }
-  }, [])
+  }, [isMobile])
+
+  // Handle touch events on final overlay for swipe back navigation (mobile only)
+  const handleFinalOverlayTouchStart = (e) => {
+    if (!isMobile) return
+    setFinalOverlayTouchEnd(null)
+    setFinalOverlayTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const handleFinalOverlayTouchMove = (e) => {
+    if (!isMobile) return
+    setFinalOverlayTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const handleFinalOverlayTouchEnd = () => {
+    if (!isMobile || !finalOverlayTouchStart || !finalOverlayTouchEnd) return
+
+    const distance = finalOverlayTouchStart - finalOverlayTouchEnd
+    const isRightSwipe = distance < -50
+
+    if (isRightSwipe) {
+      // Swipe right - go back to ecosystem section
+      handleScrollProgress(0.75)
+    }
+  }
 
   const headerBg = `linear-gradient(135deg, rgba(32, 32, 36, 0.95) 0%, rgba(24, 24, 27, 0.95) 100%),
        repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px),
@@ -127,11 +242,12 @@ function MainApp() {
           background: headerBg,
           backdropFilter: 'blur(10px)',
           borderBottom: `1px solid ${borderColor}`,
-          padding: '1rem 2rem',
+          padding: isMobile ? '0.75rem 1rem' : '1rem 2rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          transition: 'all 0.3s ease'
+          transition: 'all 0.3s ease',
+          flexWrap: isMobile ? 'wrap' : 'nowrap'
         }}>
           <div
             style={{
@@ -144,6 +260,16 @@ function MainApp() {
             onClick={() => {
               setTargetProgress(0)
               setAnimationPhase('intro')
+              blackoutTargetRef.current = 0
+              // On mobile, reset to intro section
+              if (isMobile) {
+                handleScrollProgress(0)
+              } else if (contentPaneRef.current) {
+                contentPaneRef.current.scrollTo({
+                  top: 0,
+                  behavior: 'smooth'
+                })
+              }
             }}
             onMouseOver={(e) => {
               e.currentTarget.style.opacity = '0.8'
@@ -152,9 +278,9 @@ function MainApp() {
               e.currentTarget.style.opacity = '1'
             }}
           >
-            <img src="/logo.png" alt="Archeum Logo" style={{ width: '28px', height: 'auto' }} />
+            <img src="/logo.png" alt="Archeum Logo" style={{ width: isMobile ? '24px' : '28px', height: 'auto' }} />
             <span style={{
-              fontSize: '1.35rem',
+              fontSize: isMobile ? '1.1rem' : '1.35rem',
               fontWeight: 500,
               fontFamily: '"Gotham Medium", "Montserrat", system-ui, sans-serif',
               letterSpacing: '0.1em',
@@ -166,11 +292,17 @@ function MainApp() {
               ARCHEUM
             </span>
           </div>
-          <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.9rem', opacity: 0.8 }}>
-            <a href="https://archeum.dev" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s' }}>Docs</a>
-            <a href="https://github.com/archeum-dev" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s' }}>GitHub</a>
-            <a href="https://discord.gg/cdyPcAzbhH" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s' }}>Discord</a>
-            <a href="https://patreon.com/archeum" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s' }}>Patreon</a>
+          <div style={{
+            display: 'flex',
+            gap: isMobile ? '0.75rem' : '1.5rem',
+            fontSize: isMobile ? '0.8rem' : '0.9rem',
+            opacity: 0.8,
+            flexWrap: 'wrap'
+          }}>
+            <a href="https://archeum.dev" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s', whiteSpace: 'nowrap' }}>Docs</a>
+            <a href="https://github.com/archeum-dev" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s', whiteSpace: 'nowrap' }}>GitHub</a>
+            <a href="https://discord.gg/cdyPcAzbhH" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s', whiteSpace: 'nowrap' }}>Discord</a>
+            <a href="https://patreon.com/archeum" target="_blank" rel="noopener noreferrer" style={{ color: textColor, textDecoration: 'none', transition: 'opacity 0.2s', whiteSpace: 'nowrap' }}>Patreon</a>
           </div>
         </div>
         <div
@@ -193,69 +325,137 @@ function MainApp() {
       </div>
 
       <div style={{
-        display: 'flex',
+        position: 'relative',
         width: '100%',
         height: '100%'
       }}>
-        {/* Left pane - reacts to animation phase */}
-        <ContentPane animationPhase={animationPhase} />
+        {/* Background scene - full screen */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 0
+        }}>
+          <Scene scrollProgress={scrollProgress} isMobile={isMobile} />
+        </div>
 
-        {/* Right pane - fixed canvas driven by scroll */}
-        <Scene scrollProgress={scrollProgress} />
+        {/* Progressive fade gradient behind text (desktop only) */}
+        {!isMobile && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: '45%',
+            background: 'linear-gradient(to right, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 150px)',
+            maskImage: 'linear-gradient(to bottom, transparent 0%, transparent 20%, black 30%, black 70%, transparent 80%, transparent 100%)',
+            zIndex: 5,
+            pointerEvents: 'none'
+          }} />
+        )}
+
+        {/* Content cards - horizontal scroll at bottom */}
+        <ContentPane
+          animationPhase={animationPhase}
+          isMobile={isMobile}
+          onScrollProgress={handleScrollProgress}
+          scrollRef={contentPaneRef}
+        />
       </div>
 
-      {/* Final full-screen page */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        opacity: finalOverlayProgress,
-        pointerEvents: finalOverlayProgress > 0.5 ? 'auto' : 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(120deg, #222222, #101010)',
-        zIndex: 100,
-        transition: 'background 0.3s ease'
-      }}>
+      {/* Blackout overlay - fades to pure black first */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          opacity: blackoutProgress,
+          pointerEvents: 'none',
+          background: '#000000',
+          zIndex: 99
+        }}
+      />
+
+      {/* Final full-screen page - only visible after blackout */}
+      <div
+        onTouchStart={handleFinalOverlayTouchStart}
+        onTouchMove={handleFinalOverlayTouchMove}
+        onTouchEnd={handleFinalOverlayTouchEnd}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          opacity: finalOverlayProgress,
+          pointerEvents: finalOverlayProgress > 0.9 ? 'auto' : 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, rgb(32, 32, 36) 0%, rgb(24, 24, 27) 100%)',
+          zIndex: 100
+        }}
+      >
+        {isMobile && finalOverlayProgress > 0.8 && (
+          <div style={{
+            position: 'absolute',
+            top: '1rem',
+            left: 0,
+            right: 0,
+            textAlign: 'center',
+            color: 'white',
+            opacity: 0.4,
+            fontSize: '0.75rem',
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase'
+          }}>
+            Swipe to go back
+          </div>
+        )}
         <div style={{
           textAlign: 'center',
           color: 'white',
-          padding: '2rem'
+          padding: isMobile ? '1.5rem' : '2rem',
+          maxWidth: isMobile ? '100%' : 'none'
         }}>
           <img
             src="/logo.png"
             alt="Archeum"
-            style={{ width: '160px', marginBottom: '2rem', opacity: 0.9 }}
+            style={{ width: isMobile ? '100px' : '160px', marginBottom: isMobile ? '1.5rem' : '2rem', opacity: 0.9 }}
           />
-          <h1 style={{ fontSize: '3rem', marginBottom: '1rem', fontWeight: 300 }}>
+          <h1 style={{ fontSize: isMobile ? '2rem' : '3rem', marginBottom: '1rem', fontWeight: 300 }}>
             Build on Archeum
           </h1>
-          <p style={{ fontSize: '1.5rem', opacity: 0.7, marginBottom: '3rem' }}>
+          <p style={{ fontSize: isMobile ? '1.1rem' : '1.5rem', opacity: 0.7, marginBottom: isMobile ? '2rem' : '3rem' }}>
             One unified, decentralized platform for the future.
             <br />
             Build once. Run forever.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center' }}>
             <a
-              href="https://github.com/archeum-dev/archeum-sdk"
+              href="https://github.com/archeum-dev/sdk"
               target="_blank"
               rel="noopener noreferrer"
               style={{
                 background: 'linear-gradient(135deg, #5c3905 0%, #b47a1a 55%, #d8a941 100%)',
                 color: '#0a0a0a',
-                padding: '1rem 2rem',
+                padding: isMobile ? '0.875rem 1.75rem' : '1rem 2rem',
                 border: 'none',
                 borderRadius: '4px',
-                fontSize: '1.1rem',
+                fontSize: isMobile ? '1rem' : '1.1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                 boxShadow: '0 6px 18px rgba(254, 217, 136, 0.25)',
                 textDecoration: 'none',
-                display: 'inline-block'
+                display: 'inline-block',
+                width: isMobile ? '100%' : 'auto',
+                maxWidth: isMobile ? '300px' : 'none'
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'scale(1.04)'
@@ -274,17 +474,19 @@ function MainApp() {
               style={{
                 background: 'transparent',
                 color: 'white',
-                padding: '1rem 2rem',
+                padding: isMobile ? '0.875rem 1.75rem' : '1rem 2rem',
                 border: '2px solid transparent',
                 borderRadius: '4px',
-                fontSize: '1.1rem',
+                fontSize: isMobile ? '1rem' : '1.1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'transform 0.2s ease',
                 position: 'relative',
                 overflow: 'hidden',
                 textDecoration: 'none',
-                display: 'inline-block'
+                display: 'inline-block',
+                width: isMobile ? '100%' : 'auto',
+                maxWidth: isMobile ? '300px' : 'none'
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'scale(1.04)'
@@ -297,7 +499,7 @@ function MainApp() {
                 inset: 0,
                 borderRadius: '4px',
                 padding: '2px',
-                background: 'linear-gradient(135deg, #5c3905 0%, #b47a1a 55%, #d8a941 100%)',
+                background: 'linear-gradient(135deg, #2d1b02 0%, #6d470f 55%, #8a6b25 100%)',
                 WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
                 WebkitMaskComposite: 'xor',
                 maskComposite: 'exclude',

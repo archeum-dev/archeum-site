@@ -1,7 +1,7 @@
 @font-face {
   font-family: 'Gotham Medium';
   src: url('/fonts/gotham_medium-webfont.woff2') format('woff2'),
-       url('/fonts/gotham_medium-webfont.woff') format('woff');
+    url('/fonts/gotham_medium-webfont.woff') format('woff');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -66,4 +66,17 @@ body {
 /* For IE/Edge */
 * {
   -ms-overflow-style: none;
+}
+
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Allow vertical scrolling on mobile */
+  #root {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }

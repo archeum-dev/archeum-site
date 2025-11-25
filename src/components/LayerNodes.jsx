@@ -186,6 +186,7 @@ export default function LayerNodes({
                     metalness={0}
                     roughness={0.5}
                     transparent
+                    opacity={1}
                     toneMapped={false}
                 />
             </instancedMesh>
@@ -242,6 +243,7 @@ function LineSegments({ lines, color, targetColor }) {
                 color={hasGradient ? "#ffffff" : color}
                 vertexColors={hasGradient}
                 transparent
+                opacity={1}
             />
         </lineSegments>
     )

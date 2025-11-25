@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // Helper function to darken a hex color
 const darkenColor = (hex, percent = 40) => {
@@ -9,12 +9,89 @@ const darkenColor = (hex, percent = 40) => {
     return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
 }
 
-export default function ContentPane({ animationPhase }) {
+export default function ContentPane({ animationPhase, isMobile, onScrollProgress, scrollRef }) {
     const containerRef = useRef(null)
     const sectionRefs = useRef({})
+    const [activeCardIndex, setActiveCardIndex] = useState(0)
+    const [touchStart, setTouchStart] = useState(null)
+    const [touchEnd, setTouchEnd] = useState(null)
 
-    // Snap to section when animation phase changes
+    // Combine internal ref with external ref
+    const setRefs = (el) => {
+        containerRef.current = el
+        if (scrollRef) {
+            scrollRef.current = el
+        }
+    }
+
+    // Sync activeCardIndex with animationPhase changes (for titlebar reset on mobile)
     useEffect(() => {
+        if (!isMobile) return
+
+        const phaseToIndex = {
+            'intro': 0,
+            'foundation': 1,
+            'network': 2,
+            'ecosystem': 3
+        }
+
+        const index = phaseToIndex[animationPhase]
+        if (index !== undefined && index !== activeCardIndex) {
+            setActiveCardIndex(index)
+        }
+    }, [animationPhase, isMobile, activeCardIndex])
+
+    // Mobile touch handling for section navigation
+    useEffect(() => {
+        if (!isMobile) return
+
+        const handleTouchStart = (e) => {
+            setTouchEnd(null)
+            setTouchStart(e.targetTouches[0].clientX)
+        }
+
+        const handleTouchMove = (e) => {
+            setTouchEnd(e.targetTouches[0].clientX)
+        }
+
+        const handleTouchEnd = () => {
+            if (!touchStart || !touchEnd) return
+
+            const distance = touchStart - touchEnd
+            const isLeftSwipe = distance > 50
+            const isRightSwipe = distance < -50
+
+            if (isLeftSwipe && activeCardIndex < 4) {
+                // Swipe left - go to next section (0-4, where 4 is final screen)
+                const newIndex = activeCardIndex + 1
+                setActiveCardIndex(newIndex)
+                onScrollProgress(newIndex / 4)
+            } else if (isRightSwipe && activeCardIndex > 0) {
+                // Swipe right - go to previous section
+                const newIndex = activeCardIndex - 1
+                setActiveCardIndex(newIndex)
+                onScrollProgress(newIndex / 4)
+            }
+        }
+
+        const container = containerRef.current
+        if (!container) return
+
+        container.addEventListener('touchstart', handleTouchStart)
+        container.addEventListener('touchmove', handleTouchMove)
+        container.addEventListener('touchend', handleTouchEnd)
+
+        return () => {
+            container.removeEventListener('touchstart', handleTouchStart)
+            container.removeEventListener('touchmove', handleTouchMove)
+            container.removeEventListener('touchend', handleTouchEnd)
+        }
+    }, [isMobile, touchStart, touchEnd, activeCardIndex, onScrollProgress])
+
+    // Snap to section when animation phase changes (desktop only)
+    useEffect(() => {
+        if (isMobile) return // Skip on mobile, use CSS scroll snap instead
+
         const section = sectionRefs.current[animationPhase]
         const container = containerRef.current
 
@@ -30,7 +107,27 @@ export default function ContentPane({ animationPhase }) {
                 behavior: 'smooth'
             })
         }
-    }, [animationPhase])
+    }, [animationPhase, isMobile])
+
+    // Track scroll position to trigger final overlay (desktop only)
+    useEffect(() => {
+        if (!onScrollProgress || isMobile) return
+
+        const container = containerRef.current
+        if (!container) return
+
+        const handleScroll = () => {
+            // Vertical scroll on desktop
+            const scrollTop = container.scrollTop
+            const scrollHeight = container.scrollHeight
+            const clientHeight = container.clientHeight
+            const scrollPosition = scrollTop / (scrollHeight - clientHeight)
+            onScrollProgress(scrollPosition)
+        }
+
+        container.addEventListener('scroll', handleScroll)
+        return () => container.removeEventListener('scroll', handleScroll)
+    }, [isMobile, onScrollProgress])
 
     const sections = [
         {
@@ -94,50 +191,74 @@ export default function ContentPane({ animationPhase }) {
 
     return (
         <div
-            ref={containerRef}
+            ref={setRefs}
             style={{
-                width: '40%',
-                height: '100vh',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                background: backgroundColor,
+                position: isMobile ? 'fixed' : 'relative',
+                bottom: isMobile ? 0 : 'auto',
+                left: isMobile ? 0 : 'auto',
+                right: isMobile ? 0 : 'auto',
+                width: isMobile ? '100vw' : '40%',
+                height: isMobile ? 'auto' : '100vh',
+                maxHeight: isMobile ? '50vh' : '100vh',
+                overflow: isMobile ? 'hidden' : 'auto',
+                background: isMobile
+                    ? 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.6) 40%, transparent 100%)'
+                    : 'transparent',
                 color: textColor,
-                scrollBehavior: 'smooth',
-                pointerEvents: 'none', // Prevent interaction with left pane
-                paddingTop: '80px', // Account for fixed header
-                transition: 'background 0.3s ease, color 0.3s ease'
+                scrollBehavior: isMobile ? 'auto' : 'smooth',
+                pointerEvents: 'auto',
+                paddingTop: isMobile ? '2rem' : '80px',
+                paddingBottom: isMobile ? '4rem' : '0',
+                paddingLeft: isMobile ? '2rem' : '0',
+                paddingRight: isMobile ? '2rem' : '0',
+                transition: 'background 0.3s ease, color 0.3s ease',
+                scrollSnapType: isMobile ? 'none' : 'y proximity',
+                display: 'block',
+                zIndex: 10,
+                boxSizing: 'border-box'
             }}
         >
             {/* Content sections */}
-            {sections.map((section) => (
+            {sections.map((section, index) => (
                 <section
                     key={section.id}
                     ref={(el) => (sectionRefs.current[section.id] = el)}
                     style={{
-                        minHeight: '100vh',
-                        padding: '4rem 3rem',
-                        display: 'flex',
+                        minHeight: isMobile ? 'auto' : '100vh',
+                        padding: isMobile ? '0' : '4rem 3rem',
+                        display: isMobile ? (index === activeCardIndex ? 'flex' : 'none') : 'flex',
                         flexDirection: 'column',
-                        justifyContent: 'center'
+                        justifyContent: isMobile ? 'flex-start' : 'center',
+                        scrollSnapAlign: isMobile ? 'none' : 'start',
+                        background: 'transparent',
+                        overflow: isMobile ? 'hidden' : 'visible',
+                        boxSizing: 'border-box',
+                        opacity: isMobile ? (index === activeCardIndex ? 1 : 0) : 1,
+                        transition: isMobile ? 'opacity 0.8s ease' : 'none',
+                        width: '100%',
+                        maxWidth: '100%'
                     }}
                 >
                     {section.useBanner ? (
                         <div style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '1.2rem',
-                            marginBottom: '2rem'
+                            gap: isMobile ? '0.8rem' : '1.2rem',
+                            marginBottom: isMobile ? '1.5rem' : '2rem',
+                            width: '100%',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box'
                         }}>
                             <img
                                 src="/logo.png"
                                 alt="Archeum"
                                 style={{
-                                    width: '55px',
-                                    height: '55px'
+                                    width: isMobile ? '40px' : '55px',
+                                    height: isMobile ? '40px' : '55px'
                                 }}
                             />
                             <h1 style={{
-                                fontSize: '4rem',
+                                fontSize: isMobile ? '2.5rem' : '4rem',
                                 fontWeight: 500,
                                 margin: 0,
                                 letterSpacing: '0.05em',
@@ -146,7 +267,10 @@ export default function ContentPane({ animationPhase }) {
                                 background: 'linear-gradient(135deg, #d8a941 0%, #b47a1a 55%, #5c3905 100%)',
                                 WebkitBackgroundClip: 'text',
                                 WebkitTextFillColor: 'transparent',
-                                backgroundClip: 'text'
+                                backgroundClip: 'text',
+                                wordWrap: 'break-word',
+                                overflowWrap: 'break-word',
+                                maxWidth: '100%'
                             }}>
                                 ARCHEUM
                             </h1>
@@ -154,10 +278,10 @@ export default function ContentPane({ animationPhase }) {
                     ) : (
                         <>
                             <h1 style={{
-                                fontSize: '3rem',
+                                fontSize: isMobile ? '2rem' : '3rem',
                                 fontWeight: 500,
                                 margin: 0,
-                                marginBottom: '1.5rem',
+                                marginBottom: isMobile ? '1rem' : '1.5rem',
                                 letterSpacing: '0.05em',
                                 fontFamily: '"Gotham Medium", "Montserrat", system-ui, sans-serif',
                                 textTransform: 'uppercase',
@@ -165,28 +289,35 @@ export default function ContentPane({ animationPhase }) {
                                 WebkitBackgroundClip: 'text',
                                 WebkitTextFillColor: 'transparent',
                                 backgroundClip: 'text',
-                                transition: 'background 0.5s ease'
+                                transition: 'background 0.5s ease',
+                                wordWrap: 'break-word',
+                                overflowWrap: 'break-word',
+                                maxWidth: '100%'
                             }}>
                                 {section.title}
                             </h1>
                             <div style={{
-                                width: '80px',
-                                height: '3px',
+                                width: isMobile ? '60px' : '80px',
+                                height: isMobile ? '2px' : '3px',
                                 background: '#ffffff',
-                                marginBottom: '1.5rem',
+                                marginBottom: isMobile ? '1rem' : '1.5rem',
                                 transition: 'background 0.5s ease'
                             }} />
                         </>
                     )}
 
                     <p style={{
-                        fontSize: '1.5rem',
+                        fontSize: isMobile ? '1rem' : '1.5rem',
                         color: textColor,
                         opacity: 0.85,
                         fontWeight: 300,
                         lineHeight: 1.6,
-                        marginBottom: '2rem',
-                        maxWidth: '600px'
+                        marginBottom: isMobile ? '1.5rem' : '2rem',
+                        maxWidth: '100%',
+                        width: '100%',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word',
+                        boxSizing: 'border-box'
                     }}>
                         {section.description}
                     </p>
@@ -195,27 +326,32 @@ export default function ContentPane({ animationPhase }) {
                         <ul style={{
                             listStyle: 'none',
                             padding: 0,
-                            marginBottom: '2rem',
-                            maxWidth: '600px'
+                            margin: 0,
+                            marginBottom: isMobile ? '1.5rem' : '2rem',
+                            maxWidth: isMobile ? '100%' : '600px',
+                            width: '100%',
+                            boxSizing: 'border-box'
                         }}>
                             {section.details.map((detail, i) => (
                                 <li
                                     key={i}
                                     style={{
-                                        fontSize: '1.1rem',
+                                        fontSize: isMobile ? '0.95rem' : '1.1rem',
                                         color: textColor,
                                         opacity: 0.8,
-                                        marginBottom: '1rem',
-                                        paddingLeft: '1.5rem',
-                                        position: 'relative'
+                                        marginBottom: isMobile ? '0.75rem' : '1rem',
+                                        paddingLeft: isMobile ? '1.25rem' : '1.5rem',
+                                        position: 'relative',
+                                        wordWrap: 'break-word',
+                                        overflowWrap: 'break-word'
                                     }}
                                 >
                                     <span style={{
                                         position: 'absolute',
                                         left: 0,
-                                        top: '0.5rem',
-                                        width: '6px',
-                                        height: '6px',
+                                        top: isMobile ? '0.45rem' : '0.5rem',
+                                        width: isMobile ? '5px' : '6px',
+                                        height: isMobile ? '5px' : '6px',
                                         borderRadius: '50%',
                                         background: textColor
                                     }} />
@@ -225,19 +361,73 @@ export default function ContentPane({ animationPhase }) {
                         </ul>
                     )}
 
-                    <p style={{
-                        color: textColor,
-                        fontSize: '0.9rem',
-                        letterSpacing: '0.1em',
-                        textTransform: 'uppercase',
-                        opacity: 0.7,
-                        fontWeight: 600,
-                        transition: 'color 0.5s ease'
-                    }}>
-                        {section.subtitle}
-                    </p>
+                    {(section.subtitle || (isMobile && section.id === 'intro')) && (
+                        <p style={{
+                            color: textColor,
+                            fontSize: isMobile ? '0.8rem' : '0.9rem',
+                            letterSpacing: '0.1em',
+                            textTransform: 'uppercase',
+                            opacity: 0.7,
+                            fontWeight: 600,
+                            transition: 'color 0.5s ease',
+                            margin: 0,
+                            maxWidth: '100%',
+                            width: '100%',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word',
+                            boxSizing: 'border-box'
+                        }}>
+                            {isMobile && section.id === 'intro' ? 'Swipe to explore →' : section.subtitle}
+                        </p>
+                    )}
                 </section>
             ))}
+
+            {/* Extra scroll space to ensure final page appears only after intentional scroll (desktop only) */}
+            {!isMobile && (
+                <div style={{
+                    minHeight: '100vh',
+                    scrollSnapAlign: 'start'
+                }}>
+                </div>
+            )}
+
+            {/* Mobile swipe indicators */}
+            {isMobile && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '1rem',
+                    left: 0,
+                    right: 0,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    zIndex: 20,
+                    pointerEvents: 'none',
+                    width: '100vw',
+                    opacity: activeCardIndex === 4 ? 0 : 1,
+                    transition: 'opacity 0.8s ease'
+                }}>
+                    {[...sections, { id: 'final' }].map((_, index) => (
+                        <div
+                            key={index}
+                            style={{
+                                width: activeCardIndex === index ? '24px' : '8px',
+                                height: '8px',
+                                borderRadius: '4px',
+                                background: activeCardIndex === index
+                                    ? 'linear-gradient(135deg, #d8a941 0%, #b47a1a 55%, #5c3905 100%)'
+                                    : 'rgba(255, 255, 255, 0.3)',
+                                transition: 'all 0.8s ease',
+                                boxShadow: activeCardIndex === index
+                                    ? '0 2px 8px rgba(216, 169, 65, 0.4)'
+                                    : 'none'
+                            }}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     )
 }

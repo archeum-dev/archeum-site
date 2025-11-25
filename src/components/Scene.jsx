@@ -5,14 +5,15 @@ import { BlendFunction } from 'postprocessing'
 import * as THREE from 'three'
 import Experience from './Experience'
 
-export default function Scene({ scrollProgress }) {
+export default function Scene({ scrollProgress, isMobile = false }) {
     const containerBg = '#050505'
     const canvasBg = '#050505'
     const bloomConfig = { threshold: 0.2, intensity: 1.5, blend: BlendFunction.ADD }
+    const offsetX = 0 // Centered on both mobile and desktop
 
     return (
         <div style={{
-            width: '60%',
+            width: '100%',
             height: '100vh',
             position: 'relative',
             transition: 'background-color 0.3s ease',
@@ -32,7 +33,7 @@ export default function Scene({ scrollProgress }) {
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Environment preset="city" />
 
-                <Experience scrollProgress={scrollProgress} />
+                <Experience scrollProgress={scrollProgress} offsetX={offsetX} isMobile={isMobile} />
 
                 <EffectComposer disableNormalPass>
                     <Bloom

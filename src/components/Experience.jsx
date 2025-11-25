@@ -5,7 +5,7 @@ import LayerNodes from './LayerNodes'
 import FloatingParticles from './FloatingParticles'
 import InterLayerLines from './InterLayerLines'
 
-export default function Experience({ scrollProgress = 0 }) {
+export default function Experience({ scrollProgress = 0, offsetX = 0, isMobile = false }) {
   const groupRef = useRef()
 
   const layer1Opacity = useRef(0)
@@ -21,8 +21,8 @@ export default function Experience({ scrollProgress = 0 }) {
   const ecosystemUpwardOpacity = useRef(0)
 
   // Camera position refs for smooth transitions
-  const currentCameraPos = useRef({ x: 15, y: 20, z: 50 })
-  const currentLookAt = useRef({ x: 0, y: 8, z: 0 })
+  const currentCameraPos = useRef({ x: 0, y: 50, z: 0 })
+  const currentLookAt = useRef({ x: 0, y: 0, z: 0 })
 
   useFrame((state, delta) => {
     const offset = scrollProgress
@@ -39,17 +39,29 @@ export default function Experience({ scrollProgress = 0 }) {
 
     let zPos, yPos, lookAtY
 
-    // Camera positioning
-    const foundationCam = { z: 12, y: 6.5, lookAt: 1.2 }
-    const networkCam = { z: 12, y: 14.5, lookAt: 9.5 }
-    const ecosystemCam = { z: 12, y: 20.5, lookAt: 17.5 }
+    // Camera positioning (lookAt lower on mobile to center layers higher in viewport)
+    const lookAtOffset = isMobile ? -4 : 0
+    const foundationCam = { z: 12, y: 6.5, lookAt: 1.2 + lookAtOffset }
+    const networkCam = { z: 12, y: 14.5, lookAt: 9.5 + lookAtOffset }
+    const ecosystemCam = { z: 12, y: 20.5, lookAt: 17.5 + lookAtOffset }
 
     if (offset < 0.18) {
-      // Phase 1: Zoom to Foundation - starts immediately on scroll
+      // Phase 1: Arc from top-down to original far side view, then descend to foundation
       const t = Math.min(offset / 0.18, 1) // Normalize to 0-1
-      zPos = THREE.MathUtils.lerp(50, foundationCam.z, t)
-      yPos = THREE.MathUtils.lerp(20, foundationCam.y, t)
-      lookAtY = THREE.MathUtils.lerp(8, foundationCam.lookAt, t)
+
+      if (t < 0.5) {
+        // First half: Arc from top-down (0, 50, 0) to original side view (15, 20, 50)
+        const arcT = t / 0.5 // 0 to 1 for arc phase
+        zPos = THREE.MathUtils.lerp(0, 0, arcT)
+        yPos = THREE.MathUtils.lerp(50, 20, arcT)
+        lookAtY = THREE.MathUtils.lerp(0, 8 + lookAtOffset, arcT)
+      } else {
+        // Second half: Descend from original side view to foundation
+        const descendT = (t - 0.5) / 0.5 // 0 to 1 for descend phase
+        zPos = THREE.MathUtils.lerp(0, foundationCam.z, descendT)
+        yPos = THREE.MathUtils.lerp(20, foundationCam.y, descendT)
+        lookAtY = THREE.MathUtils.lerp(8 + lookAtOffset, foundationCam.lookAt, descendT)
+      }
     } else if (offset < 0.35) {
       // Phase 3: Foundation - STATIC (camera locked, lines growing)
       zPos = foundationCam.z
@@ -80,9 +92,24 @@ export default function Experience({ scrollProgress = 0 }) {
     }
 
     // Smoothly lerp camera position and lookAt for smooth transitions
-    const lerpFactor = Math.min(delta * 8, 1) // Adjust speed with the multiplier
+    const lerpFactor = Math.min(delta * 4, 1) // Slower transitions for smoother animations
 
-    const targetPos = { x: 15, y: yPos, z: zPos }
+    // Lerp x position during intro phase (further away on mobile)
+    const targetX = isMobile ? 24 : 16
+    let xPos = targetX
+    if (offset < 0.18) {
+      const t = Math.min(offset / 0.18, 1)
+      const lim = 0.5
+      if (t < lim) {
+        // First half: Move from 0 to 0 during arc to original side view
+        xPos = THREE.MathUtils.lerp(0, 0, t / lim)
+      }
+      else {
+        xPos = THREE.MathUtils.lerp(0, targetX, (t - lim) / (1 - lim))
+      }
+    }
+
+    const targetPos = { x: xPos, y: yPos, z: zPos }
     const targetLookAt = { x: 0, y: lookAtY, z: 0 }
 
     currentCameraPos.current.x = THREE.MathUtils.lerp(currentCameraPos.current.x, targetPos.x, lerpFactor)
@@ -101,15 +128,16 @@ export default function Experience({ scrollProgress = 0 }) {
     // Foundation Layer (White, Y=0) - Always visible
     layer1Opacity.current = 1
 
-    // Network Layer (Blue, Y=8) - fade in BEFORE coming into view
+    // Network Layer (Blue, Y=8) - visible in intro, fade out as approaching foundation, fade in before network
     let l2Opacity
-    if (offset < 0.10) {
-      l2Opacity = 1 // Visible in intro
+    if (offset < 0.14) {
+      l2Opacity = 1 // Visible during intro
     } else if (offset < 0.18) {
-      // Fade out during foundation zoom
-      l2Opacity = 1 - ((offset - 0.10) / 0.08)
+      // Fade out as camera approaches foundation layer
+      const fadeProgress = (offset - 0.14) / (0.18 - 0.14)
+      l2Opacity = 1 - fadeProgress
     } else if (offset < 0.30) {
-      l2Opacity = 0 // Hidden during foundation section
+      l2Opacity = 0 // Hidden during foundation section (layer is above focus)
     } else if (offset < 0.38) {
       // Fade in BEFORE transition completes (finishes as it comes into view)
       l2Opacity = (offset - 0.30) / 0.08
@@ -118,15 +146,16 @@ export default function Experience({ scrollProgress = 0 }) {
     }
     layer2Opacity.current = l2Opacity
 
-    // Apps Layer (Orange, Y=16) - fade in BEFORE coming into view
+    // Apps Layer (Orange, Y=16) - visible in intro, fade out as approaching foundation, fade in before ecosystem
     let l3Opacity
-    if (offset < 0.08) {
-      l3Opacity = 1 // Visible in intro
+    if (offset < 0.14) {
+      l3Opacity = 1 // Visible during intro
     } else if (offset < 0.18) {
-      // Fade out during foundation zoom
-      l3Opacity = 1 - ((offset - 0.08) / 0.10)
+      // Fade out as camera approaches foundation layer
+      const fadeProgress = (offset - 0.14) / (0.18 - 0.14)
+      l3Opacity = 1 - fadeProgress
     } else if (offset < 0.53) {
-      l3Opacity = 0 // Hidden during foundation and network sections
+      l3Opacity = 0 // Hidden during foundation and network sections (layer is above focus)
     } else if (offset < 0.61) {
       // Fade in BEFORE transition completes (finishes as it comes into view)
       l3Opacity = (offset - 0.53) / 0.08
@@ -144,13 +173,18 @@ export default function Experience({ scrollProgress = 0 }) {
     const FADED_OPACITY = 0.1 // Keep lines visible but faded
 
     // Foundation to Network lines
+    const LAYER_PAUSE = 0.03 // Pause before lines extend
     if (offset < 0.18) {
       // Not started yet (waiting for zoom to complete)
       foundationToNetworkGrowth.current = 0
       foundationToNetworkOpacity.current = 0
+    } else if (offset < 0.18 + LAYER_PAUSE) {
+      // Pause phase - camera arrived but lines haven't started
+      foundationToNetworkGrowth.current = 0
+      foundationToNetworkOpacity.current = 0
     } else if (offset < 0.35) {
       // Phase 2: Lines growing from foundation to network
-      const growthProgress = (offset - 0.18) / 0.17
+      const growthProgress = (offset - 0.18 - LAYER_PAUSE) / (0.17 - LAYER_PAUSE)
       foundationToNetworkGrowth.current = growthProgress
       foundationToNetworkOpacity.current = Math.min(1, growthProgress * 2) // Fade in faster
     } else if (offset < 0.38) {
@@ -169,9 +203,13 @@ export default function Experience({ scrollProgress = 0 }) {
       // Not started yet
       networkToEcosystemGrowth.current = 0
       networkToEcosystemOpacity.current = 0
+    } else if (offset < 0.38 + LAYER_PAUSE) {
+      // Pause phase - camera arrived but lines haven't started
+      networkToEcosystemGrowth.current = 0
+      networkToEcosystemOpacity.current = 0
     } else if (offset < 0.58) {
       // Phase 5: Lines growing from network to ecosystem
-      const growthProgress = (offset - 0.38) / 0.20
+      const growthProgress = (offset - 0.38 - LAYER_PAUSE) / (0.20 - LAYER_PAUSE)
       networkToEcosystemGrowth.current = growthProgress
       networkToEcosystemOpacity.current = Math.min(1, growthProgress * 2) // Fade in faster
     } else if (offset < 0.61) {
@@ -190,9 +228,13 @@ export default function Experience({ scrollProgress = 0 }) {
       // Not started yet
       ecosystemUpwardGrowth.current = 0
       ecosystemUpwardOpacity.current = 0
+    } else if (offset < 0.61 + LAYER_PAUSE) {
+      // Pause phase - camera arrived but lines haven't started
+      ecosystemUpwardGrowth.current = 0
+      ecosystemUpwardOpacity.current = 0
     } else if (offset < 0.78) {
       // Phase 7: Lines growing upward from ecosystem
-      const growthProgress = (offset - 0.61) / 0.17
+      const growthProgress = (offset - 0.61 - LAYER_PAUSE) / (0.17 - LAYER_PAUSE)
       ecosystemUpwardGrowth.current = growthProgress
       ecosystemUpwardOpacity.current = Math.min(1, growthProgress * 2)
     } else {
@@ -233,7 +275,7 @@ export default function Experience({ scrollProgress = 0 }) {
     <>
       <FloatingParticles count={200} />
 
-      <group ref={groupRef}>
+      <group ref={groupRef} position={[offsetX, 0, 0]}>
         {/* Foundation Layer - White in dark mode, Black in light mode */}
         <group position={[0, 0, 0]}>
           <LayerNodesWrapper

@@ -117,8 +117,8 @@ export default function InterLayerLines({
       const startNode = startNodes[startIndices[i]]
       const endNode = endNodes[endIndices[i]]
 
-      // Add random offset for staggered growth
-      const offset = rng() * 0.3 // Random offset 0-30%
+      // Add random offset for staggered growth - varied timing
+      const offset = rng() * 0.6 // Start between 0-60% of the way through the animation
 
       pairs.push({
         start: [startNode.x, startY + startNode.y, startNode.z],
