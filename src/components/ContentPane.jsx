@@ -9,12 +9,12 @@ const darkenColor = (hex, percent = 40) => {
     return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
 }
 
-export default function ContentPane({ animationPhase, isMobile, onScrollProgress, scrollRef }) {
+export default function ContentPane({ animationPhase, isMobile, onScrollProgress, onDragProgress, scrollRef, isDragging, setIsDragging, isOnFinalPage, setIsOnFinalPage, scrollProgress }) {
     const containerRef = useRef(null)
     const sectionRefs = useRef({})
     const [activeCardIndex, setActiveCardIndex] = useState(0)
     const [touchStart, setTouchStart] = useState(null)
-    const [touchEnd, setTouchEnd] = useState(null)
+    const [touchCurrent, setTouchCurrent] = useState(null)
 
     // Combine internal ref with external ref
     const setRefs = (el) => {
@@ -26,108 +26,139 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
 
     // Sync activeCardIndex with animationPhase changes (for titlebar reset on mobile)
     useEffect(() => {
-        if (!isMobile) return
+        if (!isMobile || isDragging) return // Don't sync during drag to avoid conflicts
 
         const phaseToIndex = {
             'intro': 0,
             'foundation': 1,
             'network': 2,
             'ecosystem': 3
+            // Note: final page keeps phase as 'ecosystem'
         }
 
         const index = phaseToIndex[animationPhase]
         if (index !== undefined && index !== activeCardIndex) {
             setActiveCardIndex(index)
         }
-    }, [animationPhase, isMobile, activeCardIndex])
+    }, [animationPhase, isMobile, activeCardIndex, isDragging])
 
-    // Mobile touch handling for section navigation
+    // Mobile touch handling for continuous swipe navigation
     useEffect(() => {
         if (!isMobile) return
 
         const handleTouchStart = (e) => {
-            setTouchEnd(null)
+            setIsDragging(true)
             setTouchStart(e.targetTouches[0].clientX)
+            setTouchCurrent(e.targetTouches[0].clientX)
         }
 
         const handleTouchMove = (e) => {
-            setTouchEnd(e.targetTouches[0].clientX)
+            if (!isDragging || !touchStart) return
+
+            const currentX = e.targetTouches[0].clientX
+            setTouchCurrent(currentX)
+
+            // Calculate drag distance
+            const dragDistance = touchStart - currentX
+            const screenWidth = window.innerWidth
+            const dragProgress = dragDistance / screenWidth
+
+            // Apply dampening factor (0.4) for scene partial animation
+            const dampenedProgress = dragProgress * 0.4
+
+            // Map activeCardIndex to actual discrete snap points
+            // Note: final page is at 1.0 (0.82 blackout)
+            const snapPoints = [0, 0.18, 0.38, 0.61, 0.82]
+            let baseProgress = snapPoints[activeCardIndex] || 0
+
+            // If on final page, start from blackout state
+            if (isOnFinalPage) {
+                baseProgress = 0.82
+            }
+
+            // Calculate range for partial animation
+            let nextSnap, prevSnap
+            if (isOnFinalPage) {
+                // On final page, can only go back to ecosystem
+                nextSnap = 0.82
+                prevSnap = 0.61
+            } else if (activeCardIndex === 3) {
+                // On ecosystem, can go to final page
+                nextSnap = 0.82
+                prevSnap = snapPoints[activeCardIndex - 1] || baseProgress
+            } else {
+                nextSnap = snapPoints[activeCardIndex + 1] || baseProgress
+                prevSnap = snapPoints[activeCardIndex - 1] || baseProgress
+            }
+
+            // Clamp to stay within prev/next snap boundaries
+            const minProgress = prevSnap
+            const maxProgress = nextSnap
+            const newProgress = Math.max(minProgress, Math.min(maxProgress, baseProgress + dampenedProgress))
+
+            // Use drag handler for continuous updates (bypasses quantization)
+            onDragProgress(newProgress)
         }
 
         const handleTouchEnd = () => {
-            if (!touchStart || !touchEnd) return
+            if (!isDragging || !touchStart || !touchCurrent) {
+                setIsDragging(false)
+                return
+            }
 
-            const distance = touchStart - touchEnd
-            const isLeftSwipe = distance > 50
-            const isRightSwipe = distance < -50
+            const distance = touchStart - touchCurrent
+            const swipeThreshold = 50
+            const isLeftSwipe = distance > swipeThreshold
+            const isRightSwipe = distance < -swipeThreshold
 
-            if (isLeftSwipe && activeCardIndex < 4) {
-                // Swipe left - go to next section (0-4, where 4 is final screen)
+            if (isLeftSwipe && activeCardIndex < 3) {
+                // Swipe left - go to next section
                 const newIndex = activeCardIndex + 1
                 setActiveCardIndex(newIndex)
+                setIsOnFinalPage(false)
                 onScrollProgress(newIndex / 4)
+            } else if (isLeftSwipe && activeCardIndex === 3 && !isOnFinalPage) {
+                // Swipe left from ecosystem - trigger final screen
+                setIsOnFinalPage(true)
+                onScrollProgress(1.0) // Trigger final overlay
+            } else if (isRightSwipe && isOnFinalPage) {
+                // Swipe right from final page - go back to ecosystem
+                setIsOnFinalPage(false)
+                onScrollProgress(0.75) // Back to ecosystem
             } else if (isRightSwipe && activeCardIndex > 0) {
                 // Swipe right - go to previous section
                 const newIndex = activeCardIndex - 1
                 setActiveCardIndex(newIndex)
+                setIsOnFinalPage(false)
                 onScrollProgress(newIndex / 4)
+            } else {
+                // Snap back to current section
+                if (isOnFinalPage) {
+                    onScrollProgress(1.0)
+                } else {
+                    onScrollProgress(activeCardIndex / 4)
+                }
             }
+
+            setIsDragging(false)
+            setTouchStart(null)
+            setTouchCurrent(null)
         }
 
         const container = containerRef.current
         if (!container) return
 
-        container.addEventListener('touchstart', handleTouchStart)
-        container.addEventListener('touchmove', handleTouchMove)
-        container.addEventListener('touchend', handleTouchEnd)
+        container.addEventListener('touchstart', handleTouchStart, { passive: true })
+        container.addEventListener('touchmove', handleTouchMove, { passive: true })
+        container.addEventListener('touchend', handleTouchEnd, { passive: true })
 
         return () => {
             container.removeEventListener('touchstart', handleTouchStart)
             container.removeEventListener('touchmove', handleTouchMove)
             container.removeEventListener('touchend', handleTouchEnd)
         }
-    }, [isMobile, touchStart, touchEnd, activeCardIndex, onScrollProgress])
+    }, [isMobile, touchStart, touchCurrent, isDragging, setIsDragging, activeCardIndex, isOnFinalPage, onScrollProgress, onDragProgress])
 
-    // Snap to section when animation phase changes (desktop only)
-    useEffect(() => {
-        if (isMobile) return // Skip on mobile, use CSS scroll snap instead
-
-        const section = sectionRefs.current[animationPhase]
-        const container = containerRef.current
-
-        if (section && container) {
-            // Calculate position to center the section
-            const containerHeight = container.clientHeight
-            const sectionTop = section.offsetTop
-            const sectionHeight = section.offsetHeight
-            const scrollTo = sectionTop - (containerHeight / 2) + (sectionHeight / 2)
-
-            container.scrollTo({
-                top: scrollTo,
-                behavior: 'smooth'
-            })
-        }
-    }, [animationPhase, isMobile])
-
-    // Track scroll position to trigger final overlay (desktop only)
-    useEffect(() => {
-        if (!onScrollProgress || isMobile) return
-
-        const container = containerRef.current
-        if (!container) return
-
-        const handleScroll = () => {
-            // Vertical scroll on desktop
-            const scrollTop = container.scrollTop
-            const scrollHeight = container.scrollHeight
-            const clientHeight = container.clientHeight
-            const scrollPosition = scrollTop / (scrollHeight - clientHeight)
-            onScrollProgress(scrollPosition)
-        }
-
-        container.addEventListener('scroll', handleScroll)
-        return () => container.removeEventListener('scroll', handleScroll)
-    }, [isMobile, onScrollProgress])
 
     const sections = [
         {
@@ -189,64 +220,174 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
 
     const textColor = 'white'
 
+    // Calculate drag offset for sliding animations (mobile only)
+    // Sections slide 1:1 with finger (no dampening)
+    const dragOffset = isMobile && isDragging && touchStart && touchCurrent
+        ? ((touchStart - touchCurrent) / window.innerWidth) * 100
+        : 0
+
     return (
         <div
             ref={setRefs}
             style={{
-                position: isMobile ? 'fixed' : 'relative',
-                bottom: isMobile ? 0 : 'auto',
-                left: isMobile ? 0 : 'auto',
+                position: 'fixed',
+                top: isMobile ? 0 : 'auto',
+                bottom: 0,
+                left: 0,
                 right: isMobile ? 0 : 'auto',
-                width: isMobile ? '100vw' : '40%',
-                height: isMobile ? 'auto' : '100vh',
-                maxHeight: isMobile ? '45vh' : '100vh',
-                overflow: isMobile ? 'hidden' : 'auto',
-                background: isMobile
-                    ? 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.6) 40%, transparent 100%)'
-                    : 'transparent',
+                width: isMobile ? '100vw' : '35%',
+                height: isMobile ? '100vh' : 'auto',
+                maxHeight: isMobile ? '100vh' : '60vh',
+                overflow: isMobile ? 'hidden' : 'visible',
+                background: 'transparent',
                 color: textColor,
                 scrollBehavior: isMobile ? 'auto' : 'smooth',
                 pointerEvents: 'auto',
-                paddingTop: isMobile ? '1.5rem' : '80px',
-                paddingBottom: isMobile ? '3rem' : '0',
-                paddingLeft: isMobile ? '1.5rem' : '0',
-                paddingRight: isMobile ? '1.5rem' : '0',
+                paddingTop: isMobile ? '0' : '0',
+                paddingBottom: isMobile ? '0' : '3rem',
+                paddingLeft: isMobile ? '0' : '3rem',
+                paddingRight: isMobile ? '0' : '3rem',
                 transition: 'background 0.3s ease, color 0.3s ease',
-                scrollSnapType: isMobile ? 'none' : 'y proximity',
-                display: isMobile ? 'flex' : 'block',
-                flexDirection: isMobile ? 'column' : undefined,
-                justifyContent: isMobile ? 'flex-end' : undefined,
+                scrollSnapType: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
                 zIndex: 10,
                 boxSizing: 'border-box'
             }}
         >
+            {/* Mobile gradient overlay behind text - full screen but non-interactive */}
+            {isMobile && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.6) 30%, transparent 50%)',
+                    pointerEvents: 'none',
+                    zIndex: -1
+                }} />
+            )}
+
+            <div style={{
+                position: 'relative',
+                width: '100%',
+                height: isMobile ? 'auto' : 'auto',
+                overflow: 'visible',
+                paddingTop: isMobile ? '1.5rem' : '0',
+                paddingBottom: isMobile ? '4rem' : '0',
+                boxSizing: 'border-box'
+            }}
+        >
             {/* Content sections */}
-            {sections.map((section, index) => (
-                <section
-                    key={section.id}
-                    ref={(el) => (sectionRefs.current[section.id] = el)}
-                    style={{
-                        minHeight: isMobile ? 'auto' : '100vh',
-                        padding: isMobile ? '0' : '4rem 3rem',
-                        display: isMobile ? (index === activeCardIndex ? 'flex' : 'none') : 'flex',
-                        flexDirection: 'column',
-                        justifyContent: isMobile ? 'flex-start' : 'center',
-                        scrollSnapAlign: isMobile ? 'none' : 'start',
-                        background: 'transparent',
-                        overflow: isMobile ? 'hidden' : 'visible',
-                        boxSizing: 'border-box',
-                        opacity: isMobile ? (index === activeCardIndex ? 1 : 0) : 1,
-                        transition: isMobile ? 'opacity 0.8s ease' : 'none',
-                        width: '100%',
-                        maxWidth: '100%'
-                    }}
-                >
+            {sections.map((section, index) => {
+                // Calculate transform for sliding animation (mobile only)
+                let transform = 'translateX(0)'
+                let opacity = 1
+                let pointerEvents = 'auto'
+
+                if (isMobile) {
+                    if (isOnFinalPage) {
+                        // On final page - all sections are off-screen to the left
+                        transform = 'translateX(-100%)'
+                        opacity = 0
+                        pointerEvents = 'none'
+                    } else if (isDragging) {
+                        // During drag, show current, next, and previous sections
+                        if (index === activeCardIndex) {
+                            // Current section slides with drag
+                            transform = `translateX(${-dragOffset}%)`
+                            opacity = 1
+                        } else if (index === activeCardIndex + 1) {
+                            // Next section slides in from right
+                            transform = `translateX(${100 - dragOffset}%)`
+                            opacity = 1
+                        } else if (index === activeCardIndex - 1) {
+                            // Previous section slides in from left
+                            transform = `translateX(${-100 - dragOffset}%)`
+                            opacity = 1
+                        } else {
+                            // Hide other sections
+                            opacity = 0
+                            pointerEvents = 'none'
+                        }
+                    } else {
+                        // Not dragging - only show active section
+                        if (index === activeCardIndex) {
+                            transform = 'translateX(0)'
+                            opacity = 1
+                        } else if (index < activeCardIndex) {
+                            // Sections before active are off-screen left
+                            transform = 'translateX(-100%)'
+                            opacity = 0
+                            pointerEvents = 'none'
+                        } else {
+                            // Sections after active are off-screen right
+                            transform = 'translateX(100%)'
+                            opacity = 0
+                            pointerEvents = 'none'
+                        }
+                    }
+                } else {
+                    // Desktop: snap between sections with scroll-up animation
+                    // Only one section visible at a time
+                    const phaseOrder = ['intro', 'foundation', 'network', 'ecosystem']
+                    const currentPhaseIndex = phaseOrder.indexOf(animationPhase)
+                    const sectionIndex = phaseOrder.indexOf(section.id)
+
+                    if (sectionIndex < currentPhaseIndex) {
+                        // Past sections - scrolled up and out
+                        transform = 'translateY(-100%)'
+                        opacity = 0
+                        pointerEvents = 'none'
+                    } else if (sectionIndex === currentPhaseIndex) {
+                        // Current active section
+                        transform = 'translateY(0%)'
+                        opacity = 1
+                        pointerEvents = 'auto'
+                    } else {
+                        // Future sections - waiting below
+                        transform = 'translateY(100%)'
+                        opacity = 0
+                        pointerEvents = 'none'
+                    }
+                }
+
+                return (
+                    <section
+                        key={section.id}
+                        ref={(el) => (sectionRefs.current[section.id] = el)}
+                        style={{
+                            minHeight: 'auto',
+                            padding: isMobile ? '0 1.5rem 3.5rem 1.5rem' : '0',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'flex-end',
+                            scrollSnapAlign: 'none',
+                            background: 'transparent',
+                            overflow: 'visible',
+                            boxSizing: 'border-box',
+                            opacity: opacity,
+                            transition: isMobile ? 'none' : 'transform 0.25s ease-out, opacity 0.25s ease-out',
+                            transform: transform,
+                            width: '100%',
+                            maxWidth: '100%',
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            top: isMobile ? 0 : 'auto',
+                            height: isMobile ? '100%' : 'auto',
+                            pointerEvents: pointerEvents
+                        }}
+                    >
                     {section.useBanner ? (
                         <div style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: isMobile ? '0.8rem' : '1.2rem',
-                            marginBottom: isMobile ? '1.5rem' : '2rem',
+                            marginBottom: isMobile ? '0' : '2rem',
                             width: '100%',
                             maxWidth: '100%',
                             boxSizing: 'border-box'
@@ -283,7 +424,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                                 fontSize: isMobile ? '2rem' : '3rem',
                                 fontWeight: 500,
                                 margin: 0,
-                                marginBottom: isMobile ? '1rem' : '1.5rem',
+                                marginBottom: isMobile ? '0' : '1.5rem',
                                 letterSpacing: '0.05em',
                                 fontFamily: '"Gotham Medium", "Montserrat", system-ui, sans-serif',
                                 textTransform: 'uppercase',
@@ -302,7 +443,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                                 width: isMobile ? '60px' : '80px',
                                 height: isMobile ? '2px' : '3px',
                                 background: '#ffffff',
-                                marginBottom: isMobile ? '1rem' : '1.5rem',
+                                marginBottom: isMobile ? '0' : '1.5rem',
                                 transition: 'background 0.5s ease'
                             }} />
                         </>
@@ -334,7 +475,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                             width: '100%',
                             boxSizing: 'border-box'
                         }}>
-                            {section.details.map((detail, i) => (
+                            {(isMobile ? section.details.slice(0, 2) : section.details).map((detail, i) => (
                                 <li
                                     key={i}
                                     style={{
@@ -383,16 +524,8 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                         </p>
                     )}
                 </section>
-            ))}
-
-            {/* Extra scroll space to ensure final page appears only after intentional scroll (desktop only) */}
-            {!isMobile && (
-                <div style={{
-                    minHeight: '100vh',
-                    scrollSnapAlign: 'start'
-                }}>
-                </div>
-            )}
+                )
+            })}
 
             {/* Mobile swipe indicators */}
             {isMobile && (
@@ -408,14 +541,14 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                     zIndex: 20,
                     pointerEvents: 'none',
                     width: '100vw',
-                    opacity: activeCardIndex === 4 ? 0 : 1,
+                    opacity: isOnFinalPage ? 0 : 1,
                     transition: 'opacity 0.8s ease'
                 }}>
                     {[...sections, { id: 'final' }].map((_, index) => (
                         <div
                             key={index}
                             style={{
-                                width: activeCardIndex === index ? '24px' : '8px',
+                                width: (index === 4 && isOnFinalPage) || (index === activeCardIndex && !isOnFinalPage) ? '24px' : '8px',
                                 height: '8px',
                                 borderRadius: '4px',
                                 background: activeCardIndex === index
@@ -430,6 +563,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                     ))}
                 </div>
             )}
+            </div>
         </div>
     )
 }

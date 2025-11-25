@@ -15,6 +15,8 @@ function MainApp() {
   const [blackoutProgress, setBlackoutProgress] = useState(0)
   const [finalOverlayProgress, setFinalOverlayProgress] = useState(0)
   const [isMobile, setIsMobile] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isOnFinalPage, setIsOnFinalPage] = useState(false)
   const [finalOverlayTouchStart, setFinalOverlayTouchStart] = useState(null)
   const [finalOverlayTouchEnd, setFinalOverlayTouchEnd] = useState(null)
   const scrollContainerRef = useRef(null)
@@ -35,7 +37,13 @@ function MainApp() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Handle scroll progress for mobile swipe navigation
+  // Handle continuous drag updates (bypasses quantization for smooth partial animation)
+  const handleDragProgress = (continuousProgress) => {
+    // Only update scrollProgress during drag - targetProgress stays at snap point
+    setScrollProgress(continuousProgress)
+  }
+
+  // Handle snap to discrete sections (used after swipe release)
   const handleScrollProgress = (scrollPosition) => {
     if (isMobile) {
       // Map horizontal scroll to animation phases
@@ -78,13 +86,18 @@ function MainApp() {
     }
   }
 
-  // Smooth scroll animation
+  // Smooth scroll animation (only active when NOT dragging)
   useEffect(() => {
     const animate = () => {
       setScrollProgress(prev => {
+        // Skip lerp during drag - scrollProgress is set directly by handleDragProgress
+        if (isDragging) return prev
+
         const diff = targetProgress - prev
         if (Math.abs(diff) < 0.001) return targetProgress
-        return prev + diff * (isMobile ? 0.08 : 0.15) // Faster mobile animations
+
+        // Slow lerp for smooth animation after swipe release
+        return prev + diff * (isMobile ? 0.08 : 0.15)
       })
       animationFrameRef.current = requestAnimationFrame(animate)
     }
@@ -94,7 +107,7 @@ function MainApp() {
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [targetProgress, isMobile])
+  }, [targetProgress, isMobile, isDragging])
 
   useEffect(() => {
     if (isMobile) return // Skip wheel handling on mobile, use natural scroll instead
@@ -123,6 +136,13 @@ function MainApp() {
       if (phase !== animationPhase) {
         setAnimationPhase(phase)
       }
+
+      // Trigger final page when reaching blackout zone
+      if (newProgress >= BLACKOUT_START) {
+        setIsOnFinalPage(true)
+      } else {
+        setIsOnFinalPage(false)
+      }
     }
 
     window.addEventListener('wheel', handleWheel, { passive: false })
@@ -147,13 +167,16 @@ function MainApp() {
   }, [scrollProgress, isMobile])
 
   // Final overlay fades in automatically once blackout is complete
+  // Note: Only controls animation targets, never sets state (state drives animations, not vice versa)
   useEffect(() => {
-    if (blackoutProgress >= 0.95) {
+    if (isOnFinalPage && blackoutProgress >= 0.95) {
+      // On final page and blackout complete - show overlay
       finalOverlayTargetRef.current = 1
     } else {
+      // Not on final page or blackout incomplete - hide overlay
       finalOverlayTargetRef.current = 0
     }
-  }, [blackoutProgress])
+  }, [blackoutProgress, isOnFinalPage])
 
   // Animate blackout overlay (scroll-controlled fade to black)
   useEffect(() => {
@@ -215,6 +238,7 @@ function MainApp() {
 
     if (isRightSwipe) {
       // Swipe right - go back to ecosystem section
+      setIsOnFinalPage(false)
       handleScrollProgress(0.75)
     }
   }
@@ -345,13 +369,13 @@ function MainApp() {
         {!isMobile && (
           <div style={{
             position: 'absolute',
-            top: 0,
             left: 0,
             bottom: 0,
-            width: '45%',
-            background: 'linear-gradient(to right, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 150px)',
-            maskImage: 'linear-gradient(to bottom, transparent 0%, transparent 20%, black 30%, black 70%, transparent 80%, transparent 100%)',
+            width: '40%',
+            height: '70vh',
+            background: 'linear-gradient(to right, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.5) 60%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to top, black 0%, black 70%, transparent 100%)',
+            maskImage: 'linear-gradient(to top, black 0%, black 70%, transparent 100%)',
             zIndex: 5,
             pointerEvents: 'none'
           }} />
@@ -362,7 +386,13 @@ function MainApp() {
           animationPhase={animationPhase}
           isMobile={isMobile}
           onScrollProgress={handleScrollProgress}
+          onDragProgress={handleDragProgress}
           scrollRef={contentPaneRef}
+          isDragging={isDragging}
+          setIsDragging={setIsDragging}
+          isOnFinalPage={isOnFinalPage}
+          setIsOnFinalPage={setIsOnFinalPage}
+          scrollProgress={scrollProgress}
         />
       </div>
 
