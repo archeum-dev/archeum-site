@@ -5,7 +5,7 @@ import LayerNodes from './LayerNodes'
 import FloatingParticles from './FloatingParticles'
 import InterLayerLines from './InterLayerLines'
 
-export default function Experience({ scrollProgress = 0, offsetX = 0, isMobile = false }) {
+export default function Experience({ scrollProgress = 0, offsetX = 0, isMobile = false, isDragging = false }) {
   const groupRef = useRef()
 
   const layer1Opacity = useRef(0)
@@ -46,21 +46,25 @@ export default function Experience({ scrollProgress = 0, offsetX = 0, isMobile =
     const ecosystemCam = { z: 12, y: 20.5, lookAt: 17.5 + lookAtOffset }
 
     if (offset < 0.18) {
-      // Phase 1: Arc from top-down to original far side view, then descend to foundation
+      // Phase 1: Drop straight down center, then arc out to side view
       const t = Math.min(offset / 0.18, 1) // Normalize to 0-1
 
       if (t < 0.5) {
-        // First half: Arc from top-down (0, 50, 0) to original side view (15, 20, 50)
-        const arcT = t / 0.5 // 0 to 1 for arc phase
-        zPos = THREE.MathUtils.lerp(0, 0, arcT)
-        yPos = THREE.MathUtils.lerp(50, 20, arcT)
-        lookAtY = THREE.MathUtils.lerp(0, 8 + lookAtOffset, arcT)
+        // First half: Drop straight down the center (minimal offset to avoid singularity)
+        const dropT = t / 0.5 // 0 to 1 for drop phase
+        // Keep camera nearly centered during drop
+        // Note: x position set below in separate block
+        yPos = THREE.MathUtils.lerp(50, 20, dropT)
+        lookAtY = THREE.MathUtils.lerp(0, 8 + lookAtOffset, dropT)
       } else {
-        // Second half: Descend from original side view to foundation
-        const descendT = (t - 0.5) / 0.5 // 0 to 1 for descend phase
-        zPos = THREE.MathUtils.lerp(0, foundationCam.z, descendT)
-        yPos = THREE.MathUtils.lerp(20, foundationCam.y, descendT)
-        lookAtY = THREE.MathUtils.lerp(8 + lookAtOffset, foundationCam.lookAt, descendT)
+        // Second half: Arc out to side with smooth acceleration
+        const arcT = (t - 0.5) / 0.5 // 0 to 1 for arc phase
+        // Apply smoothstep for smooth acceleration/deceleration
+        const easedT = arcT * arcT * (3 - 2 * arcT)
+
+        // Note: x and z positions set below in separate block using circular arc
+        yPos = THREE.MathUtils.lerp(20, foundationCam.y, easedT)
+        lookAtY = THREE.MathUtils.lerp(8 + lookAtOffset, foundationCam.lookAt, easedT)
       }
     } else if (offset < 0.35) {
       // Phase 3: Foundation - STATIC (camera locked, lines growing)
@@ -94,18 +98,34 @@ export default function Experience({ scrollProgress = 0, offsetX = 0, isMobile =
     // Smoothly lerp camera position and lookAt for smooth transitions
     const lerpFactor = Math.min(delta * 4, 1) // Slower transitions for smoother animations
 
-    // Lerp x position during intro phase (further away on mobile)
+    // X and Z position during intro phase (circular arc animation)
     const targetX = isMobile ? 24 : 16
     let xPos = targetX
     if (offset < 0.18) {
       const t = Math.min(offset / 0.18, 1)
       const lim = 0.5
       if (t < lim) {
-        // First half: Move from 0 to 0 during arc to original side view
-        xPos = THREE.MathUtils.lerp(0, 0, t / lim)
+        // First half: Stay centered during vertical drop (minimal offset to avoid singularity)
+        xPos = 0.5
+        zPos = 1
       }
       else {
-        xPos = THREE.MathUtils.lerp(0, targetX, (t - lim) / (1 - lim))
+        // Second half: Rotate camera in circular arc around the structure
+        const arcT = (t - lim) / (1 - lim)
+        const easedT = arcT * arcT * (3 - 2 * arcT) // smoothstep
+
+        // Calculate circular path in xz plane
+        const startRadius = Math.sqrt(0.5 * 0.5 + 1 * 1) // radius at drop position
+        const endRadius = Math.sqrt(targetX * targetX + foundationCam.z * foundationCam.z)
+        const radius = THREE.MathUtils.lerp(startRadius, endRadius, easedT)
+
+        // Calculate angles to ensure we end at foundation camera position
+        const startAngle = Math.atan2(1, 0.5) // angle of start position
+        const endAngle = Math.atan2(foundationCam.z, targetX) // angle of foundation camera
+        const angle = THREE.MathUtils.lerp(startAngle, endAngle, easedT)
+
+        xPos = Math.cos(angle) * radius
+        zPos = Math.sin(angle) * radius
       }
     }
 

@@ -369,7 +369,9 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                             overflow: 'visible',
                             boxSizing: 'border-box',
                             opacity: opacity,
-                            transition: isMobile ? 'none' : 'transform 0.25s ease-out, opacity 0.25s ease-out',
+                            transition: isMobile
+                                ? (isDragging ? 'none' : 'transform 0.3s ease-out, opacity 0.3s ease-out')
+                                : 'transform 0.25s ease-out, opacity 0.25s ease-out',
                             transform: transform,
                             width: '100%',
                             maxWidth: '100%',

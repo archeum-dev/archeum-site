@@ -5,7 +5,7 @@ import { BlendFunction } from 'postprocessing'
 import * as THREE from 'three'
 import Experience from './Experience'
 
-export default function Scene({ scrollProgress, isMobile = false }) {
+export default function Scene({ scrollProgress, isMobile = false, isDragging = false }) {
     const containerBg = '#050505'
     const canvasBg = '#050505'
     const bloomConfig = { threshold: 0.2, intensity: 1.5, blend: BlendFunction.ADD }
@@ -33,7 +33,7 @@ export default function Scene({ scrollProgress, isMobile = false }) {
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 <Environment preset="city" />
 
-                <Experience scrollProgress={scrollProgress} offsetX={offsetX} isMobile={isMobile} />
+                <Experience scrollProgress={scrollProgress} offsetX={offsetX} isMobile={isMobile} isDragging={isDragging} />
 
                 <EffectComposer disableNormalPass>
                     <Bloom

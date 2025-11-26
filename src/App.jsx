@@ -5,7 +5,7 @@ import ContentPane from './components/ContentPane'
 import AIHelp from './components/AIHelp'
 
 const MAX_SCROLL_PROGRESS = 0.82
-const BLACKOUT_START = 0.78
+const BLACKOUT_START = 0.80
 const BLACKOUT_END = 0.82
 
 function MainApp() {
@@ -97,7 +97,8 @@ function MainApp() {
         if (Math.abs(diff) < 0.001) return targetProgress
 
         // Slow lerp for smooth animation after swipe release
-        return prev + diff * (isMobile ? 0.08 : 0.15)
+        // Lower value = slower, more visible line growth animation
+        return prev + diff * (isMobile ? 0.05 : 0.15)
       })
       animationFrameRef.current = requestAnimationFrame(animate)
     }
@@ -186,7 +187,7 @@ function MainApp() {
         if (Math.abs(diff) < 0.001) {
           return blackoutTargetRef.current
         }
-        return prev + diff * (isMobile ? 0.08 : 0.1) // Match mobile scroll speed
+        return prev + diff * (isMobile ? 0.05 : 0.1) // Match mobile scroll speed
       })
       blackoutAnimRef.current = requestAnimationFrame(animateBlackout)
     }
@@ -206,7 +207,7 @@ function MainApp() {
         if (Math.abs(diff) < 0.001) {
           return finalOverlayTargetRef.current
         }
-        return prev + diff * (isMobile ? 0.08 : 0.08) // Match mobile speed
+        return prev + diff * (isMobile ? 0.05 : 0.08) // Match mobile speed
       })
       finalOverlayAnimRef.current = requestAnimationFrame(animateOverlay)
     }
@@ -362,7 +363,7 @@ function MainApp() {
           bottom: 0,
           zIndex: 0
         }}>
-          <Scene scrollProgress={scrollProgress} isMobile={isMobile} />
+          <Scene scrollProgress={scrollProgress} isMobile={isMobile} isDragging={isDragging} />
         </div>
 
         {/* Progressive fade gradient behind text (desktop only) */}
