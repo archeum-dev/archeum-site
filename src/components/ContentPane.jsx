@@ -389,7 +389,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                             display: 'flex',
                             alignItems: 'center',
                             gap: isMobile ? '0.8rem' : '1.2rem',
-                            marginBottom: isMobile ? '0' : '2rem',
+                            marginBottom: '0',
                             width: '100%',
                             maxWidth: '100%',
                             boxSizing: 'border-box'
@@ -426,7 +426,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                                 fontSize: isMobile ? '2rem' : '3rem',
                                 fontWeight: 500,
                                 margin: 0,
-                                marginBottom: isMobile ? '0' : '1.5rem',
+                                marginBottom: isMobile ? '0' : '1.3rem',
                                 letterSpacing: '0.05em',
                                 fontFamily: '"Gotham Medium", "Montserrat", system-ui, sans-serif',
                                 textTransform: 'uppercase',
@@ -445,7 +445,7 @@ export default function ContentPane({ animationPhase, isMobile, onScrollProgress
                                 width: isMobile ? '60px' : '80px',
                                 height: isMobile ? '2px' : '3px',
                                 background: '#ffffff',
-                                marginBottom: isMobile ? '0' : '1.5rem',
+                                marginBottom: isMobile ? '0' : '.3rem',
                                 transition: 'background 0.5s ease'
                             }} />
                         </>
